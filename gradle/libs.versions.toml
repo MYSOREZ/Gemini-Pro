@@ -12,8 +12,8 @@ lifecycle = "2.9.4"
 webkit = "1.14.0"
 splashScreen = "1.0.1"
 datastore = "1.1.7"
-hilt = "2.51.1"
-hiltNavigationCompose = "1.2.0"
+hilt = "2.50"
+hiltNavigationCompose = "1.1.0"
 
 
 [libraries]
