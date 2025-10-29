@@ -12,12 +12,6 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.net.URLDecoder
 import android.content.Context
-import androidx.core.content.ContextCompat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
 private const val TAG = "BlobDownloader"
 
@@ -55,8 +49,8 @@ class BlobDownloaderInterface {
     private fun saveToDownloads(data: ByteArray, filename: String): File? {
         return try {
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (!downloadsDir?.exists() == true) {
-                downloadsDir?.mkdirs()
+            if (downloadsDir != null && !downloadsDir.exists()) {
+                downloadsDir.mkdirs()
             }
             
             val file = File(downloadsDir, filename)
@@ -79,7 +73,7 @@ class BlobDownloaderInterface {
     @JavascriptInterface
     fun processEnhancedBlobData(dataUrl: String, mimeType: String = ""): File? {
         return try {
-            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
             
             // Determine file extension from MIME type or data URL
             val detectedMimeType = when {
@@ -92,9 +86,9 @@ class BlobDownloaderInterface {
             }
             
             val extension = getExtensionFromMimeType(detectedMimeType)
-            val filename = "gemini_download_$timestamp.$extension"
+            val dynamicName = "gemini_download_" + timestamp + "." + extension
             
-            processBlobData(dataUrl, filename)
+            processBlobData(dataUrl, dynamicName)
             
         } catch (e: Exception) {
             Log.e(TAG, "Error in enhanced blob processing", e)
@@ -131,13 +125,13 @@ class BlobDownloaderInterface {
                 
                 val (collection, relativePath) = when {
                     mimeType.startsWith("image/") -> 
-                        Pair(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_PICTURES + "/Gemini")
+                        android.util.Pair(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_PICTURES + "/Gemini")
                     mimeType.startsWith("video/") -> 
-                        Pair(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MOVIES + "/Gemini")
+                        android.util.Pair(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MOVIES + "/Gemini")
                     mimeType.startsWith("audio/") -> 
-                        Pair(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MUSIC + "/Gemini")
+                        android.util.Pair(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MUSIC + "/Gemini")
                     else -> 
-                        Pair(MediaStore.Downloads.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_DOWNLOADS)
+                        android.util.Pair(MediaStore.Downloads.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_DOWNLOADS)
                 }
                 
                 val contentValues = ContentValues().apply {
@@ -146,7 +140,7 @@ class BlobDownloaderInterface {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
                 }
                 
-                val uri = resolver.insert(collection, contentValues)
+                val uri = resolver.insert(collection.first, contentValues)
                 uri?.let {
                     resolver.openOutputStream(it)?.use { output ->
                         output.write(data)
@@ -155,10 +149,8 @@ class BlobDownloaderInterface {
                     return true
                 }
             } else {
-                // Fallback for older Android versions
                 return saveToDownloads(data, filename) != null
             }
-            
             false
         } catch (e: Exception) {
             Log.e(TAG, "Error saving to MediaStore", e)
