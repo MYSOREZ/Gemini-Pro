@@ -123,16 +123,15 @@ class BlobDownloaderInterface {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 val resolver = context.contentResolver
                 
-                val (collection, relativePath) = when {
-                    mimeType.startsWith("image/") -> 
-                        android.util.Pair(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_PICTURES + "/Gemini")
-                    mimeType.startsWith("video/") -> 
-                        android.util.Pair(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MOVIES + "/Gemini")
-                    mimeType.startsWith("audio/") -> 
-                        android.util.Pair(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MUSIC + "/Gemini")
-                    else -> 
-                        android.util.Pair(MediaStore.Downloads.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_DOWNLOADS)
+                // Replace android.util.Pair destructuring with standard Pair
+                val pair: Pair<android.net.Uri, String> = when {
+                    mimeType.startsWith("image/") -> Pair(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_PICTURES + "/Gemini")
+                    mimeType.startsWith("video/") -> Pair(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MOVIES + "/Gemini")
+                    mimeType.startsWith("audio/") -> Pair(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_MUSIC + "/Gemini")
+                    else -> Pair(MediaStore.Downloads.EXTERNAL_CONTENT_URI, Environment.DIRECTORY_DOWNLOADS)
                 }
+                val collection = pair.first
+                val relativePath = pair.second
                 
                 val contentValues = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
@@ -140,7 +139,7 @@ class BlobDownloaderInterface {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
                 }
                 
-                val uri = resolver.insert(collection.first, contentValues)
+                val uri = resolver.insert(collection, contentValues)
                 uri?.let {
                     resolver.openOutputStream(it)?.use { output ->
                         output.write(data)
