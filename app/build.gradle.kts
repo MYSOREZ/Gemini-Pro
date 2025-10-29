@@ -30,16 +30,24 @@ android {
         }
     }
 
-    kotlin {
-        jvmToolchain(21)
-    }
+    // Удалили нестабильную настройку агрегации Hilt
+    // hilt { enableAggregatingTask = false }
 
-    hilt {
-        enableAggregatingTask = false
+    // Явно фиксируем toolchain под Kotlin 2.0.x
+    kotlin {
+        jvmToolchain(17)
     }
 
     buildFeatures {
         compose = true
+    }
+}
+
+kapt {
+    correctErrorTypes = true
+    useBuildCache = true
+    arguments {
+        arg("kapt.incremental.apt", "false")
     }
 }
 
