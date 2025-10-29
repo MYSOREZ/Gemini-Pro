@@ -18,6 +18,13 @@ android {
         versionName = "1.6.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        javaCompileOptions {
+            annotationProcessorOptions {
+                argument("dagger.fastInit", "enabled")
+                // Disable KSP-based aggregating for plugin to avoid JavaPoet path
+                argument("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
+            }
+        }
     }
 
     buildTypes {
@@ -30,10 +37,6 @@ android {
         }
     }
 
-    // Удалили нестабильную настройку агрегации Hilt
-    // hilt { enableAggregatingTask = false }
-
-    // Явно фиксируем toolchain под Kotlin 2.0.x
     kotlin {
         jvmToolchain(17)
     }
@@ -48,11 +51,12 @@ kapt {
     useBuildCache = true
     arguments {
         arg("kapt.incremental.apt", "false")
+        arg("dagger.fastInit", "ENABLED")
+        arg("dagger.hilt.shareTestComponents", "true")
     }
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -72,6 +76,9 @@ dependencies {
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
+
+    // Align JavaPoet explicitly as runtime dep in case plugin resolution misses force
+    implementation("com.squareup:javapoet:1.13.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
