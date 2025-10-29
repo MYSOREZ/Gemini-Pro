@@ -10,9 +10,9 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
-    // Pin Hilt Gradle plugin version to 2.50 explicitly for the plugin resolution
+    // Pin Hilt Gradle plugin specifically to 2.48.1
     plugins {
-        id("com.google.dagger.hilt.android") version "2.50"
+        id("com.google.dagger.hilt.android") version "2.48.1"
     }
 }
 dependencyResolutionManagement {
