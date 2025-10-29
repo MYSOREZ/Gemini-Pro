@@ -35,7 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.rx.geminipro.R
 import com.rx.geminipro.components.*
 import com.rx.geminipro.utils.permissions.GetPermissions
@@ -229,7 +229,7 @@ private fun WebViewLayout(
     val useHorizontalLayout = uiState.isSplitScreen && (isLandscape || isLargeScreen)
 
     val layoutModifier = Modifier.fillMaxSize()
-    
+
     val splitModifier = Modifier.statusBarsPadding()
     val mainModifier = if(uiState.isSplitScreen) Modifier else splitModifier
 
