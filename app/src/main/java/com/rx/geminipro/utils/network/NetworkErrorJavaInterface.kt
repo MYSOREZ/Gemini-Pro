@@ -1,4 +1,4 @@
-package com.rx.geminipro.utils.network // Or your preferred package
+package com.rx.geminipro.utils.network
 
 import android.os.Handler
 import android.os.Looper
@@ -6,8 +6,8 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import java.lang.ref.WeakReference
 
-
-class WebAppInterface(
+// Renamed to avoid clash with WebAppInterface used for downloads
+class NetworkErrorJavaInterface(
     private val webViewRef: WeakReference<WebView?>,
     private val getRetryUrl: () -> String
 ) {
