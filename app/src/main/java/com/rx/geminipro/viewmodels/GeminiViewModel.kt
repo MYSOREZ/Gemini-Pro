@@ -10,7 +10,7 @@ import com.rx.geminipro.data.UserPreferencesRepository
 import com.rx.geminipro.utils.services.GoogleServices
 import com.rx.geminipro.utils.system.ClipboardHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
+import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
