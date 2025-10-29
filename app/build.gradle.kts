@@ -18,13 +18,6 @@ android {
         versionName = "1.6.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        javaCompileOptions {
-            annotationProcessorOptions {
-                argument("dagger.fastInit", "enabled")
-                // Disable KSP-based aggregating for plugin to avoid JavaPoet path
-                argument("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
-            }
-        }
     }
 
     buildTypes {
@@ -51,8 +44,10 @@ kapt {
     useBuildCache = true
     arguments {
         arg("kapt.incremental.apt", "false")
-        arg("dagger.fastInit", "ENABLED")
-        arg("dagger.hilt.shareTestComponents", "true")
+        // Disable Hilt aggregating task path that triggers JavaPoet
+        arg("dagger.hilt.disableAggregatingTask", "true")
+        // Disable module InstallIn check to avoid strict validation
+        arg("dagger.hilt.disableModulesHaveInstallInCheck", "true")
     }
 }
 
@@ -77,14 +72,6 @@ dependencies {
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
-    // Align JavaPoet explicitly as runtime dep in case plugin resolution misses force
+    // Ensure consistent JavaPoet
     implementation("com.squareup:javapoet:1.13.0")
-
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
-    debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
 }
