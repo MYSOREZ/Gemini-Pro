@@ -69,6 +69,12 @@ class WebViewManager(
         @SuppressLint("QueryPermissionsNeeded")
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
+            
+            // Handle blob URLs - don't override, let WebView handle them
+            if (url.startsWith("blob:")) {
+                return false
+            }
+            
             return when {
                 url.startsWith("intent://") -> handleIntentUrl(url, view)
                 url.startsWith("tel:") || url.startsWith("mailto:") || url.startsWith("sms:") || url.startsWith("market:") -> handleExternalAppUrl(url)
@@ -78,6 +84,22 @@ class WebViewManager(
 
         override fun onPageFinished(view: WebView, url: String) {
             super.onPageFinished(view, url)
+            
+            // Inject blob download handler
+            injectBlobDownloadHandler(view)
+            
+            // Inject download enhancement script
+            injectDownloadEnhancement(view)
+            
+            // Inject navigation helper
+            injectNavigationHelper(view)
+            
+            // Inject context monitor
+            injectContextMonitor(view)
+            
+            // Inject multi-file upload support
+            injectMultiFileSupport(view)
+            
             onPageFinished.invoke(view, url)
         }
 
@@ -104,7 +126,15 @@ class WebViewManager(
             filePathCallback: ValueCallback<Array<Uri>>,
             fileChooserParams: FileChooserParams
         ): Boolean {
-            val intent = fileChooserParams.createIntent()
+            val intent = fileChooserParams.createIntent().apply {
+                // Enable multiple file selection
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                // Support all file types
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                    "image/*", "video/*", "audio/*", "application/*", "text/*"
+                ))
+            }
             onShowFileChooser(filePathCallback, intent)
             return true
         }
@@ -184,13 +214,324 @@ class WebViewManager(
             }
         }
     }
+    
     var onBlobDownloadRequested: (url: String, contentDisposition: String?, mimeType: String?) -> Unit = { _, _, _ -> }
+    
     val downloadListener: DownloadListener = DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
         when {
-            url.startsWith("blob:") -> onBlobDownloadRequested(url, contentDisposition, mimeType)
+            url.startsWith("blob:") -> {
+                // Blob URLs are handled by JavaScript interface
+                Log.d(TAG, "Blob URL detected, handling via JavaScript")
+            }
             url.startsWith("data:") -> handleDataUrlDownload(url)
             else -> handleStandardDownload(url, userAgent, contentDisposition, mimeType)
         }
+    }
+
+    // --- JavaScript Injection Methods ---
+    
+    private fun injectBlobDownloadHandler(webView: WebView) {
+        val script = """
+            (function() {
+                // Enhanced blob URL handler
+                function interceptBlobDownloads() {
+                    // Monitor for download buttons and links
+                    const observer = new MutationObserver(function(mutations) {
+                        mutations.forEach(function(mutation) {
+                            mutation.addedNodes.forEach(function(node) {
+                                if (node.nodeType === 1) { // Element node
+                                    // Find download buttons
+                                    const downloadElements = node.querySelectorAll?.('[aria-label*="Download"], [title*="Download"], .download-button, a[download]') || [];
+                                    downloadElements.forEach(setupDownloadInterception);
+                                    
+                                    // Also check if the added node itself is a download element
+                                    if (node.matches?.('[aria-label*="Download"], [title*="Download"], .download-button, a[download]')) {
+                                        setupDownloadInterception(node);
+                                    }
+                                }
+                            });
+                        });
+                    });
+                    
+                    // Setup existing elements
+                    document.querySelectorAll('[aria-label*="Download"], [title*="Download"], .download-button, a[download]').forEach(setupDownloadInterception);
+                    
+                    // Start observing
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                }
+                
+                function setupDownloadInterception(element) {
+                    if (element.dataset.intercepted) return; // Already intercepted
+                    element.dataset.intercepted = 'true';
+                    
+                    element.addEventListener('click', function(e) {
+                        // Look for blob URLs in nearby elements
+                        const parent = element.closest('[data-testid*="media"], .media-container, .image-container') || element.parentElement;
+                        const mediaElement = parent?.querySelector('img, video, canvas, [src*="blob:"]');
+                        
+                        if (mediaElement) {
+                            const src = mediaElement.src || mediaElement.currentSrc;
+                            if (src && src.startsWith('blob:')) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                downloadBlobContent(src, mediaElement.tagName.toLowerCase());
+                                return false;
+                            }
+                        }
+                        
+                        // Check if the element itself has a blob href
+                        if (element.href && element.href.startsWith('blob:')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            downloadBlobContent(element.href, 'file');
+                            return false;
+                        }
+                    }, true); // Use capture phase
+                }
+                
+                function downloadBlobContent(blobUrl, type) {
+                    console.log('Downloading blob:', blobUrl, 'type:', type);
+                    
+                    fetch(blobUrl)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            const reader = new FileReader();
+                            reader.onload = function() {
+                                const base64Data = reader.result;
+                                const mimeType = blob.type || 'application/octet-stream';
+                                
+                                if (type === 'img' || mimeType.startsWith('image/')) {
+                                    Android.downloadMedia(base64Data, mimeType);
+                                } else if (type === 'video' || mimeType.startsWith('video/')) {
+                                    Android.downloadMedia(base64Data, mimeType);
+                                } else {
+                                    const timestamp = new Date().getTime();
+                                    const extension = getExtensionFromMimeType(mimeType);
+                                    const filename = 'gemini_download_' + timestamp + '.' + extension;
+                                    Android.downloadBlob(base64Data, filename);
+                                }
+                            };
+                            reader.readAsDataURL(blob);
+                        })
+                        .catch(err => {
+                            console.error('Failed to download blob:', err);
+                            Android.showToast('Failed to download file: ' + err.message);
+                        });
+                }
+                
+                function getExtensionFromMimeType(mimeType) {
+                    const mimeMap = {
+                        'image/png': 'png',
+                        'image/jpeg': 'jpg',
+                        'image/gif': 'gif',
+                        'image/webp': 'webp',
+                        'video/mp4': 'mp4',
+                        'video/webm': 'webm',
+                        'application/pdf': 'pdf',
+                        'text/plain': 'txt'
+                    };
+                    return mimeMap[mimeType] || 'bin';
+                }
+                
+                // Start interception when DOM is ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', interceptBlobDownloads);
+                } else {
+                    interceptBlobDownloads();
+                }
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(script, null)
+    }
+    
+    private fun injectDownloadEnhancement(webView: WebView) {
+        val script = """
+            (function() {
+                // Enhanced right-click context menu for downloads
+                document.addEventListener('contextmenu', function(e) {
+                    const target = e.target;
+                    if (target.tagName === 'IMG' || target.tagName === 'VIDEO') {
+                        const src = target.src || target.currentSrc;
+                        if (src && src.startsWith('blob:')) {
+                            e.preventDefault();
+                            
+                            // Create custom context menu
+                            const menu = document.createElement('div');
+                            menu.style.cssText = `
+                                position: fixed;
+                                top: \${e.clientY}px;
+                                left: \${e.clientX}px;
+                                background: white;
+                                border: 1px solid #ccc;
+                                border-radius: 4px;
+                                padding: 8px;
+                                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                                z-index: 10000;
+                                font-family: Arial, sans-serif;
+                                font-size: 14px;
+                            `;
+                            
+                            const downloadOption = document.createElement('div');
+                            downloadOption.textContent = 'Download ' + target.tagName.toLowerCase();
+                            downloadOption.style.cssText = `
+                                padding: 4px 8px;
+                                cursor: pointer;
+                                border-radius: 2px;
+                            `;
+                            downloadOption.onmouseover = () => downloadOption.style.background = '#f0f0f0';
+                            downloadOption.onmouseout = () => downloadOption.style.background = 'white';
+                            downloadOption.onclick = () => {
+                                fetch(src)
+                                    .then(response => response.blob())
+                                    .then(blob => {
+                                        const reader = new FileReader();
+                                        reader.onload = function() {
+                                            Android.downloadMedia(reader.result, blob.type);
+                                        };
+                                        reader.readAsDataURL(blob);
+                                    });
+                                document.body.removeChild(menu);
+                            };
+                            
+                            menu.appendChild(downloadOption);
+                            document.body.appendChild(menu);
+                            
+                            // Remove menu on click outside
+                            setTimeout(() => {
+                                document.addEventListener('click', function removeMenu() {
+                                    if (document.body.contains(menu)) {
+                                        document.body.removeChild(menu);
+                                    }
+                                    document.removeEventListener('click', removeMenu);
+                                }, 100);
+                            });
+                        }
+                    }
+                });
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(script, null)
+    }
+    
+    private fun injectNavigationHelper(webView: WebView) {
+        val script = """
+            (function() {
+                // Add navigation helper for long chats
+                const navbar = document.createElement('div');
+                navbar.innerHTML = `
+                    <div id="gemini-nav-helper" style="
+                        position: fixed;
+                        right: 10px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        z-index: 9999;
+                        background: rgba(0,0,0,0.7);
+                        border-radius: 25px;
+                        padding: 10px;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 5px;
+                        opacity: 0.7;
+                        transition: opacity 0.3s;
+                    ">
+                        <button onclick="scrollToTop()" style="
+                            width: 40px; height: 40px; border-radius: 50%; border: none;
+                            background: #4285f4; color: white; cursor: pointer;
+                            font-size: 16px;
+                        ">↑</button>
+                        <button onclick="scrollToBottom()" style="
+                            width: 40px; height: 40px; border-radius: 50%; border: none;
+                            background: #4285f4; color: white; cursor: pointer;
+                            font-size: 16px;
+                        ">↓</button>
+                        <button onclick="scrollToLatestMessage()" style="
+                            width: 40px; height: 40px; border-radius: 50%; border: none;
+                            background: #34a853; color: white; cursor: pointer;
+                            font-size: 16px;
+                        ">⚡</button>
+                    </div>
+                `;
+                
+                window.scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+                window.scrollToBottom = () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                window.scrollToLatestMessage = () => {
+                    const messages = document.querySelectorAll('[data-testid="message"], .message');
+                    if (messages.length > 0) {
+                        messages[messages.length - 1].scrollIntoView({ behavior: 'smooth' });
+                    }
+                };
+                
+                document.body.appendChild(navbar);
+                
+                // Show/hide based on scroll
+                let hideTimeout;
+                window.addEventListener('scroll', () => {
+                    const navHelper = document.getElementById('gemini-nav-helper');
+                    if (navHelper) {
+                        navHelper.style.opacity = '1';
+                        clearTimeout(hideTimeout);
+                        hideTimeout = setTimeout(() => {
+                            navHelper.style.opacity = '0.3';
+                        }, 3000);
+                    }
+                });
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(script, null)
+    }
+    
+    private fun injectContextMonitor(webView: WebView) {
+        val script = """
+            (function() {
+                // Monitor context size and warn user
+                let messageCount = 0;
+                const observer = new MutationObserver(function() {
+                    const messages = document.querySelectorAll('[data-testid="message"], .message');
+                    const newCount = messages.length;
+                    
+                    if (newCount > messageCount && newCount > 50) {
+                        messageCount = newCount;
+                        Android.showContextWarning(messageCount);
+                    } else {
+                        messageCount = newCount;
+                    }
+                });
+                
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(script, null)
+    }
+    
+    private fun injectMultiFileSupport(webView: WebView) {
+        val script = """
+            (function() {
+                // Enhance file input to support multiple files
+                document.addEventListener('change', function(e) {
+                    if (e.target.type === 'file') {
+                        const files = e.target.files;
+                        console.log('Files selected:', files.length);
+                        
+                        // Show file count to user
+                        if (files.length > 1) {
+                            Android.showToast(files.length + ' files selected');
+                        }
+                    }
+                });
+            })();
+        """.trimIndent()
+        
+        webView.evaluateJavascript(script, null)
     }
 
     // --- Private Helper Functions ---
