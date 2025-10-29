@@ -44,9 +44,9 @@ kapt {
     useBuildCache = true
     arguments {
         arg("kapt.incremental.apt", "false")
-        // Disable Hilt aggregating task path that triggers JavaPoet
-        arg("dagger.hilt.disableAggregatingTask", "true")
-        // Disable module InstallIn check to avoid strict validation
+        // Revert previous unsupported option and keep only supported ones
+        arg("dagger.fastInit", "ENABLED")
+        arg("dagger.hilt.shareTestComponents", "true")
         arg("dagger.hilt.disableModulesHaveInstallInCheck", "true")
     }
 }
@@ -72,6 +72,5 @@ dependencies {
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
-    // Ensure consistent JavaPoet
     implementation("com.squareup:javapoet:1.13.0")
 }
